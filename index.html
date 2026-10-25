@@ -1054,18 +1054,11 @@
       return (horarioDe(barberoId)[dia] || []).slice().sort();
     }
 
-    // AGENDA POR SEMANA (lunes a domingo).
-    // Se puede reservar solo en la semana actual. La semana siguiente se abre el domingo,
-    // a la hora del último turno de ese domingo (la base de datos aplica la misma regla).
+    // AGENDA DE 30 DÍAS QUE CORRE SOLA: cada día se abre un día más al final.
+    // (La base de datos aplica la misma regla.)
     function semanaAbierta(barberoId) {
       const hoy = fechaLocal();
-      const dow = new Date(hoy + 'T12:00:00').getDay(); // 0 = domingo
-      let domingo = sumarDias(hoy, dow === 0 ? 0 : 7 - dow);
-      const turnosDomingo = (horarioDe(barberoId)[0] || []).slice().sort();
-      const ultimoDomingo = turnosDomingo[turnosDomingo.length - 1] || '00:00';
-      if (dow === 0 && horaPasada(hoy, ultimoDomingo)) domingo = sumarDias(domingo, 7);
-      const lunes = sumarDias(domingo, -6);
-      return { desde: lunes > hoy ? lunes : hoy, hasta: domingo, abreSiguiente: ultimoDomingo };
+      return { desde: hoy, hasta: sumarDias(hoy, DIAS_PARA_RESERVAR) };
     }
 
     // Cada cita ocupa un turno de una hora.
@@ -1934,9 +1927,8 @@
       const elegida = $('select-fecha').value;
       const semana = semanaAbierta(barberoId);
       const turnosSel = turnosDe(servicioElegido());
-      const domingoTxt = formatoFechaLarga(semana.hasta).replace(/^Domingo,?\s*/i, '');
       $('texto-semana').textContent =
-        `Agenda abierta hasta el domingo ${domingoTxt}. La próxima semana se abre ese domingo a las ${formatoHora(semana.abreSiguiente)}`;
+        `Puedes reservar desde hoy hasta el ${formatoFechaLarga(semana.hasta).replace(/^[^,]+,\s*/, '')}. Cada día se abre un día más.`;
       $('texto-semana').hidden = false;
 
       for (let fecha = semana.desde, i = 0; fecha <= semana.hasta; fecha = sumarDias(fecha, 1), i++) {
