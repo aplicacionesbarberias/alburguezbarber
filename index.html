@@ -744,7 +744,7 @@
           <div class="metric-card"><div class="metric-info"><h4 id="resumen-total">0</h4><p>Citas del período</p></div></div>
           <div class="metric-card"><div class="metric-info"><h4 id="resumen-completadas">0</h4><p>Realizadas</p></div></div>
           <div class="metric-card"><div class="metric-info"><h4 id="resumen-pendientes">0</h4><p>Pendientes</p></div></div>
-          <div class="metric-card"><div class="metric-info"><h4 id="resumen-ingresos">$0</h4><p>Ingresos de citas realizadas</p></div></div>
+          <div class="metric-card"><div class="metric-info"><h4 id="resumen-ingresos" style="font-family: var(--sans);">$0</h4><p>Ingresos de citas realizadas</p></div></div>
         </div>
         <p class="hint" style="margin: 0.8rem 0 0;">Los ingresos suman el precio del servicio de cada cita marcada como realizada.</p>
       </div>
@@ -775,7 +775,7 @@
         </div>
         <p class="hint" style="margin: 1rem 0 0.6rem;">Días de descanso próximos</p>
         <div class="chips" id="lista-dias-bloqueados"></div>
-        <p class="hint" style="margin: 1rem 0 0.6rem;">Festivos que habilitaste para trabajar</p>
+        <p class="hint" style="margin: 1rem 0 0.6rem;">Festivos y martes que habilitaste para trabajar</p>
         <div class="chips" id="lista-dias-abiertos"></div>
       </div>
 
@@ -2702,6 +2702,7 @@
         .forEach(c => horasCubiertas(c.hora, c.turnos || 1).forEach(h => {
           mapa[h] = c.estado === 'bloqueada' ? { tipo: 'bloq', cita: c } : { tipo: 'cita', cita: c };
         }));
+      if (festivoCerrado(yo, fecha)) return [];   // martes de descanso o festivo sin habilitar
       const dia = new Date(fecha + 'T12:00:00').getDay();
       const horas = (horarioDe(yo)[dia] || []).slice().sort();
       return horas.map(h => ({ hora: h, ...(mapa[h] || { tipo: 'libre' }) }));
@@ -2724,7 +2725,7 @@
         btn.append(
           el('span', 'dia-card-abrev', i === 0 ? 'Hoy' : DIAS_ABREV[d.getDay()]),
           el('span', 'dia-card-num', String(d.getDate())),
-          el('span', 'dia-card-estado', !lista.length ? 'Cerrado' : nb ? `${nb} bloq.` : 'Libre')
+          el('span', 'dia-card-estado', !lista.length ? (festivoCerrado(estado.miBarberoId, fecha) ? textoCierre(estado.miBarberoId, fecha) : 'Cerrado') : nb ? `${nb} bloq.` : 'Libre')
         );
         btn.addEventListener('click', () => {
           bq.fecha = fecha;
@@ -2745,7 +2746,9 @@
       const lista = estadoHorasDia(bq.fecha);
       $('bq-dia-texto').textContent = formatoFechaLarga(bq.fecha);
       $('bq-leyenda').hidden = !lista.length;
-      if (!lista.length) grid.appendChild(mensajeHorarios('Ese día no trabajas según tu horario.'));
+      if (!lista.length) grid.appendChild(mensajeHorarios(festivoCerrado(estado.miBarberoId, bq.fecha)
+        ? 'Ese día está cerrado (descanso o festivo). Si vas a trabajar, habilítalo en la Agenda.'
+        : 'Ese día no trabajas según tu horario.'));
 
       lista.forEach(x => {
         const pasada = horaPasada(bq.fecha, x.hora);
