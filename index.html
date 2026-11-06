@@ -291,6 +291,12 @@
 
     /* ---------- Horas ---------- */
     .slots-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; margin-top: 0.5rem; }
+    .slots-grid.slots-anchos { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+    .domicilio-distancias { margin-top: 0.6rem; padding: 0.8rem; border: 1px dashed var(--oro-oscuro); border-radius: 12px; }
+    .domicilio-distancias .etiqueta { margin-bottom: 0.5rem; }
+    .distancias-opciones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    @media (max-width: 380px) { .distancias-opciones { grid-template-columns: 1fr; } }
+    .distancias-opciones .servicio-opcion > span { justify-content: center; text-align: center; font-size: 0.9rem; padding: 12px 8px; }
     .slots-msg { grid-column: 1 / -1; color: var(--gris); font-size: 0.9rem; }
     .slots-msg.warn { color: var(--alerta); }
     .slot-btn {
@@ -425,6 +431,7 @@
     .badge { padding: 3px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
     .badge-pendiente  { background: rgba(230, 169, 60, 0.18); color: var(--alerta); }
     .badge-completada { background: rgba(95, 191, 133, 0.18); color: var(--ok); }
+    .badge-domicilio { border: 1px solid var(--azul); color: #9db8ff; display: inline-flex; gap: 4px; align-items: center; }
     .badge-cancelada  { background: rgba(224, 90, 82, 0.18); color: var(--peligro); }
     .badge-bloqueada  { background: rgba(154, 163, 175, 0.18); color: #c3c9d1; }
 
@@ -598,6 +605,11 @@
               <fieldset class="form-group" style="border: none;">
                 <legend class="etiqueta"><i class="fa-solid fa-scissors" aria-hidden="true"></i> Servicio</legend>
                 <div class="servicios-opciones" id="servicios-opciones"></div>
+                <div class="domicilio-distancias" id="domicilio-distancias" hidden>
+                  <p class="etiqueta"><i class="fa-solid fa-house" aria-hidden="true"></i> ¿A qué distancia es?</p>
+                  <div class="servicios-opciones distancias-opciones" id="distancias-opciones"></div>
+                  <p class="hint" style="margin: 0.6rem 0 0;">El domicilio ocupa 2 turnos seguidos. Carlos te escribe por WhatsApp para acordar la dirección y el precio.</p>
+                </div>
               </fieldset>
 
               <input type="hidden" id="select-fecha" value="">
@@ -930,8 +942,17 @@
     const SERVICIOS = {
       corte_general: { nombre: "Corte general",   precio: 30000 },
       corte_barba:   { nombre: "Corte con barba", precio: 40000 },
-      combo_vikingo: { nombre: "Combo Vikingo",   precio: 50000 }
+      combo_vikingo: { nombre: "Combo Vikingo",   precio: 50000 },
+      // Domicilio: ocupa 2 turnos seguidos y el precio se acuerda por WhatsApp.
+      // Se guarda como "domicilio_corta", "domicilio_mediana" o "domicilio_fuera".
+      domicilio:     { nombre: "Servicio a domicilio", precio: null, turnos: 2 }
     };
+    const DISTANCIAS = {
+      corta:   "Corta distancia",
+      mediana: "Mediana distancia",
+      fuera:   "Fuera de Sabaneta"
+    };
+    const esDomicilio = servicio => String(servicio || '').startsWith('domicilio');
 
     // Almuerzo que se muestra en el horario (0 = domingo … 6 = sábado). Solo es el texto;
     // los turnos reales están en Supabase (tabla barberos, columna horario).
@@ -1062,7 +1083,7 @@
     }
 
     // Cada cita ocupa un turno de una hora.
-    const turnosDe = servicio => (SERVICIOS[servicio] && SERVICIOS[servicio].turnos) || 1;
+    const turnosDe = servicio => esDomicilio(servicio) ? SERVICIOS.domicilio.turnos : (SERVICIOS[servicio] && SERVICIOS[servicio].turnos) || 1;
     const horasCubiertas = (hora, turnos) =>
       Array.from({ length: turnos }, (_, i) => sumarMinutos(hora, i * DURACION_TURNO_MIN));
     // "3:00 p. m." o, si dura más de un turno, "3:00 p. m. – 5:00 p. m."
@@ -1097,7 +1118,7 @@
     }
 
     // 28000 → $28k (si no es exacto en miles, muestra el valor completo).
-    const formatoPrecio = n => Number(n) % 1000 === 0 ? `$${Number(n) / 1000}k` : '$' + Number(n).toLocaleString('es-CO');
+    const formatoPrecio = n => n == null ? 'A convenir' : Number(n) % 1000 === 0 ? `$${Number(n) / 1000}k` : '$' + Number(n).toLocaleString('es-CO');
 
     function rangoFechas(desde, hasta) {
       const out = [];
@@ -1551,6 +1572,7 @@
       $('cliente-nombre').value = nombre;
       $('cliente-telefono').value = tel;
       $('datos-cliente-wrap').hidden = true;
+      $('domicilio-distancias').hidden = true;
       $('select-barbero').value = '';
       $('select-fecha').value = '';
       estado.horaSel = '';
@@ -1796,13 +1818,29 @@
         input.addEventListener('change', () => {
           estado.horaSel = '';
           $('datos-cliente-wrap').hidden = true;
+          $('domicilio-distancias').hidden = id !== 'domicilio';
           renderDiaStrip();
           renderHorarios();
         });
         lab.append(input, caja);
         cont.appendChild(lab);
       });
+      const dist = $('distancias-opciones');
+      Object.entries(DISTANCIAS).forEach(([id, nombre]) => {
+        const lab = el('label', 'servicio-opcion');
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = 'distancia';
+        input.value = id;
+        lab.append(input, el('span', null, nombre));
+        dist.appendChild(lab);
+      });
     }
+
+    const distanciaElegida = () => {
+      const r = document.querySelector('input[name="distancia"]:checked');
+      return r ? r.value : '';
+    };
 
     function filaTablero(nombre, valor, clase) {
       const fila = el('div', 'fila-tablero' + (clase ? ' ' + clase : ''));
@@ -2010,7 +2048,12 @@
         if (!estado.reservando) avisar('Esa hora acaba de ser tomada. Elige otra.', 'error');
       }
 
-      const lista = horas;
+      // Domicilio: solo se muestran las horas donde caben 2 turnos seguidos.
+      grid.classList.toggle('slots-anchos', turnos > 1);
+      const lista = turnos > 1 ? [...validos] : horas;
+      if (turnos > 1 && lista.length === 0) {
+        return sinHoras('Este día no hay 2 turnos seguidos libres para el domicilio. Elige otro día.');
+      }
 
       lista.forEach(hora => {
         const btn = el('button', 'slot-btn', textoHoraCita(hora, turnos));
@@ -2071,7 +2114,12 @@
       box.appendChild(el('strong', 'confirmacion-titulo', '¡Tu cita está confirmada!'));
       box.appendChild(el('span', 'confirmacion-detalle', `${formatoFechaLarga(cita.fecha)}, ${textoHoraCita(cita.hora, cita.turnos)}`));
       const serv = SERVICIOS[cita.servicio];
-      box.appendChild(el('span', null, `${serv.nombre} con ${nombreBarbero(cita.barberoId)} · ${formatoPrecio(serv.precio)}`));
+      if (esDomicilio(cita.servicio)) {
+        box.appendChild(el('span', null, `${cita.servicioNombre} con ${nombreBarbero(cita.barberoId)} · precio a convenir`));
+        box.appendChild(el('span', 'confirmacion-nota', `${nombreBarbero(cita.barberoId)} te escribe por WhatsApp para acordar la dirección y el precio.`));
+      } else {
+        box.appendChild(el('span', null, `${serv.nombre} con ${nombreBarbero(cita.barberoId)} · ${formatoPrecio(serv.precio)}`));
+      }
       box.appendChild(el('span', 'confirmacion-nota',
         `Te llega el detalle a tu correo (y a Telegram, si lo conectaste). ${RECORDATORIO_MINUTOS} minutos antes te enviamos un recordatorio.`));
 
@@ -2142,6 +2190,10 @@
 
       if (!barberoId) return avisar('Selecciona un barbero.', 'error');
       if (!servicio) return avisar('Elige el servicio que quieres.', 'error');
+      if (esDomicilio(servicio) && !distanciaElegida()) {
+        $('domicilio-distancias').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return avisar('Elige a qué distancia es el domicilio.', 'error');
+      }
       if (!fecha) return avisar('Elige un día.', 'error');
       if (!hora) return avisar('Elige una hora libre.', 'error');
       if (nombre.length < 2) return avisar('Escribe tu nombre completo.', 'error');
@@ -2163,9 +2215,12 @@
       btn.disabled = true;
       estado.reservando = true;
       try {
+        const dom = esDomicilio(servicio) ? distanciaElegida() : '';
         const cita = {
           clienteNombre: nombre, clienteTelefono: telefono, barberoId,
-          servicio, servicioNombre: SERVICIOS[servicio].nombre, fecha, hora, turnos: turnosDe(servicio),
+          servicio: dom ? `domicilio_${dom}` : servicio,
+          servicioNombre: dom ? `Domicilio (${DISTANCIAS[dom]})` : SERVICIOS[servicio].nombre,
+          fecha, hora, turnos: turnosDe(servicio),
           merienda: ''
         };
         await Store.reservar(cita);
@@ -2618,6 +2673,11 @@
       const info = el('div', 'card-info');
       const h3 = el('h3');
       h3.append(`${textoHoraCita(c.hora, c.turnos)} – ${c.clienteNombre || 'Cliente'}`);
+      if (esDomicilio(c.servicio)) {
+        const b = el('span', 'badge badge-domicilio');
+        b.append(icono('fa-solid fa-house'), ' domicilio');
+        h3.append(b);
+      }
       h3.append(el('span', `badge badge-${est}`, textoEstado));
 
       const p = el('p');
